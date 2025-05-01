@@ -1,7 +1,6 @@
 package jp.jaxa.iss.kibo.rpc.sampleapk;
 
 import android.util.Log;
-import gov.nasa.arc.astrobee.Kinematics;
 import gov.nasa.arc.astrobee.Result;
 import jp.jaxa.iss.kibo.rpc.api.KiboRpcService;
 
@@ -24,17 +23,16 @@ public class YourService extends KiboRpcService {
     protected void runPlan1(){
         api.startMission(); // Start Mission
 
-        Point targetPoint = new Point(10.95f, -10.58f, 5.195f);
+        Point targetPoint = new Point(9.867f, -6.85f, 4.945f); //Area 4
 
-        Log.i(TAG, "Strat get Kinematics");
-        Kinematics kibo = api.getRobotKinematics();
-        Log.i(TAG, "Success get Kinematics");
+        List<Point> testPath = planner.planPath(api.getRobotKinematics().getPosition(), targetPoint);
 
-        List<Point> testPath = planner.planPath(kibo.getPosition(), targetPoint);
-
+        Log.i(TAG, "Current Position: " + api.getRobotKinematics().getPosition().toString());
         for(Point p : testPath) {
+            Log.i(TAG, "Moving to: " + p.toString());
             move(p, 0f, 0f, 0f, 0f);
         }
+
 
         api.shutdownFactory();
         return;
@@ -80,8 +78,8 @@ public class YourService extends KiboRpcService {
 
     // Proper move method
     protected void move(double x, double y, double z, float qx, float qy, float qz, float qw) {
-        String pos = String.valueOf(x) + "," + String.valueOf(y) + "," + String.valueOf(z) + ", ";
-        String qua = "qua: " + String.valueOf(qx) + "," + String.valueOf(qy) + "," + String.valueOf(qz) + "," + String.valueOf(qw);
+        String pos = x + "," + y + "," + z + ", ";
+        String qua = "qua: " + qx + "," + qy + "," + qz + "," + qw;
         Log.i(TAG, pos + qua);
 
         Point p = new Point(x,y,z);

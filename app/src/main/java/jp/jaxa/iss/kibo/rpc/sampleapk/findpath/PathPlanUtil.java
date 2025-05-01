@@ -1,6 +1,5 @@
 package jp.jaxa.iss.kibo.rpc.sampleapk.findpath;
 
-import android.util.Log;
 import gov.nasa.arc.astrobee.types.Point;
 import jp.jaxa.iss.kibo.rpc.sampleapk.element.Box;
 
@@ -12,17 +11,18 @@ import java.util.*;
 
 public class PathPlanUtil {
     private final String TAG = this.getClass().getSimpleName();
+    private final double OFFSET = 0.2f;
 
     private final List<Box> OASIS = Arrays.asList(
-            new Box(10.425f, -10.2f, 4.445f, 11.425f, -9.5f, 4.945f),
-            new Box(10.925f, -9.5f, 4.945f, 11.425f, -8.45f, 5.445f),
-            new Box(10.425f, -8.45f, 4.945f, 10.975f, -7.4f, 5.445f),
-            new Box(10.925f, -7.4f, 4.425f, 11.425f, -6.35f, 4.945f)
+            new Box(10.425f + OFFSET, -10.2f + OFFSET, 4.445f + OFFSET, 11.425f - OFFSET, -9.5f - OFFSET, 4.945f - OFFSET),
+            new Box(10.925f + OFFSET, -9.5f + OFFSET, 4.945f + OFFSET, 11.425f - OFFSET, -8.45f - OFFSET, 5.445f - OFFSET),
+            new Box(10.425f + OFFSET, -8.45f + OFFSET, 4.945f + OFFSET, 10.975f - OFFSET, -7.4f - OFFSET, 5.445f - OFFSET),
+            new Box(10.925f + OFFSET, -7.4f + OFFSET, 4.425f + OFFSET, 11.425f - OFFSET, -6.35f - OFFSET, 4.945f - OFFSET)
     );
 
     private final List<Box> KIZ = Arrays.asList(
-            new Box(10.3f, -10.2f, 4.32f, 11.55f, -6.0f, 5.57f),
-            new Box(9.5f, -10.5, 4.02, 10.5f, -9.6f, 4.8f)
+            new Box(10.3f + OFFSET, -10.2f + OFFSET, 4.32f + OFFSET, 11.55f - OFFSET, -6.0f - OFFSET, 5.57f - OFFSET),
+            new Box(9.5f + OFFSET, -10.5 + OFFSET, 4.02 + OFFSET, 10.5f - OFFSET, -9.6f - OFFSET, 4.8f - OFFSET)
     );
 
     /*
@@ -33,83 +33,59 @@ public class PathPlanUtil {
      *  - If goal is unreachable, returns as far along the line as possible.
      */
 
-    public List<Point> planPath(
-            Point start,
-            Point goal
-    ) {
+    public List<Point> planPath(Point start, Point goal) {
         Point D = new Point(
                 goal.getX() - start.getX(),
                 goal.getY() - start.getY(),
                 goal.getZ() - start.getZ()
         );
 
-        // 1) Clip against KIZ
-        List<double[]> kizIv = new ArrayList<double[]>();
-        for(Box kiz : KIZ)  {
+        // 1) Find all KIZ intersections
+        List<double[]> kizIv = new ArrayList<>();
+        for (Box kiz : KIZ) {
             double[] tt = liangBarsky3D(start, D, kiz);
-            if(tt != null) {
+            if (tt != null) {
                 double t0 = clamp(tt[0], 0, 1);
                 double t1 = clamp(tt[1], 0, 1);
-                if(t0 <= t1) {
+                if (t0 <= t1) {
                     kizIv.add(new double[]{t0, t1});
                 }
             }
         }
         List<double[]> kizMerged = mergeIntervals(kizIv);
 
-        // 2) check reachability
-        if(kizMerged.isEmpty() || kizMerged.get(0)[0] > 0.0) {
-            return Collections.emptyList();
-        }
-
-        double reachableEnd = kizMerged.get(0)[1];
-        for(int i=1; i < kizMerged.size(); i++) {
-            if(kizMerged.get(i)[0] <= reachableEnd) {
-                reachableEnd = Math.max(reachableEnd, kizMerged.get(i)[1]);
+        // 2) If no KIZ intersections, check if start/goal are inside any KIZ
+        if (kizMerged.isEmpty()) {
+            boolean startInKIZ = isPointInAnyZone(start, KIZ);
+            boolean goalInKIZ = isPointInAnyZone(goal, KIZ);
+            if (!startInKIZ || !goalInKIZ) {
+                return Collections.emptyList(); // Path cannot enter KIZ
             } else {
-                break;
+                // Entire path is within KIZ (start and goal are inside)
+                return maximizeOasisPath(start, goal, D);
             }
         }
-        if( reachableEnd < 1.0) {
-            // goal is unreachable
-            return Arrays.asList(start, add(start, scale(D, reachableEnd)));
-        }
 
-        // 3) Clip against OASIS
-        List<double[]> oasisIv = new ArrayList<double[]>();
-        for(Box oasis : OASIS) {
-            double[] tt = liangBarsky3D(start, D, oasis);
-            if(tt != null) {
-                double t0 = clamp(tt[0], 0, 1);
-                double t1 = clamp(tt[1], 0, 1);
-                if(t0 <= t1) {
-                    oasisIv.add(new double[]{t0, t1});
-                }
-            }
-        }
-        List<double[]> oasisMerged = mergeIntervals(oasisIv);
+        // 3) Clip path to the KIZ segment [t_entry, t_exit]
+        double tEntry = kizMerged.get(0)[0];
+        double tExit = kizMerged.get(kizMerged.size() - 1)[1];
 
-        // 4) collect waypoints: 0, each oasis entry/exit, 1
-        TreeSet<Double> ts = new TreeSet<Double>();
-        ts.add(0.0);
-        ts.add(1.0);
-        for(double[] seg : oasisMerged) {
-            ts.add(seg[0]);
-            ts.add(seg[1]);
-        }
+        Point adjustedStart = add(start, scale(D, tEntry));
+        Point adjustedGoal = add(start, scale(D, tExit));
 
-        List<Point> waypoints = new ArrayList<Point>();
-        for(Double t : ts) {
-            waypoints.add(add(start, scale(D, t)));
-        }
+        // 4) Plan path for the clipped segment, maximizing OASIS
+        List<Point> clippedPath = maximizeOasisPath(adjustedStart, adjustedGoal, D);
 
-        return waypoints;
+        // 5) Reconstruct full path with entry/exit points
+        List<Point> fullPath = new ArrayList<>();
+        if (tEntry > 0) fullPath.add(start); // Add original start if outside KIZ
+        fullPath.addAll(clippedPath);
+        if (tExit < 1) fullPath.add(goal); // Add original goal if outside KIZ
+
+        return fullPath;
     }
 
-
-    private static double[] liangBarsky3D(
-            Point P0, Point D, Box B
-    ) {
+    private static double[] liangBarsky3D(Point P0, Point D, Box B) {
         double t0 = 0f, t1 = 1f;
         double[] p = {-D.getX(), D.getX(), -D.getY(), D.getY(), -D.getZ(), D.getZ()};
         double[] q = {
@@ -173,5 +149,44 @@ public class PathPlanUtil {
 
     private static Point scale(Point a, double s) {
         return new Point(a.getX() * s, a.getY() * s, a.getZ() * s);
+    }
+    private List<Point> maximizeOasisPath(Point start, Point goal, Point D) {
+        List<double[]> oasisIv = new ArrayList<>();
+        for (Box oasis : OASIS) {
+            double[] tt = liangBarsky3D(start, D, oasis);
+            if (tt != null) {
+                double t0 = clamp(tt[0], 0, 1);
+                double t1 = clamp(tt[1], 0, 1);
+                if (t0 <= t1) {
+                    oasisIv.add(new double[]{t0, t1});
+                }
+            }
+        }
+        List<double[]> oasisMerged = mergeIntervals(oasisIv);
+
+        TreeSet<Double> ts = new TreeSet<>();
+        ts.add(0.0);
+        ts.add(1.0);
+        for (double[] seg : oasisMerged) {
+            ts.add(seg[0]);
+            ts.add(seg[1]);
+        }
+
+        List<Point> waypoints = new ArrayList<>();
+        for (Double t : ts) {
+            waypoints.add(add(start, scale(D, t)));
+        }
+
+        return waypoints;
+    }
+    private boolean isPointInAnyZone(Point p, List<Box> zones) {
+        for (Box zone : zones) {
+            if (p.getX() >= zone.xMin && p.getX() <= zone.xMax &&
+                    p.getY() >= zone.yMin && p.getY() <= zone.yMax &&
+                    p.getZ() >= zone.zMin && p.getZ() <= zone.zMax) {
+                return true;
+            }
+        }
+        return false;
     }
 }
