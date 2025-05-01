@@ -15,10 +15,10 @@ public class PathPlanUtilTest {
 
         // 10.253, -9.788, 4.289 starting point
 
-        Point startingPoint = new Point(10.253, -9.788, 4.289);
+        Point startingPoint = new Point(10.553, -9.788, 4.599);
         Point targetPoint = new Point(9.867f, -6.85f, 4.945f); //Area 4
 
-        List<Point> path = pathPlanUtil.planPath(startingPoint, targetPoint);
+        List<Point> path = pathPlanUtil.aStar(startingPoint, targetPoint);
 
         System.out.println("Current Position: " + startingPoint.toString());
         for(Point p : path) {

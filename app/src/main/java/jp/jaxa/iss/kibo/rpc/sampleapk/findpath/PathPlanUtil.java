@@ -2,6 +2,8 @@ package jp.jaxa.iss.kibo.rpc.sampleapk.findpath;
 
 import gov.nasa.arc.astrobee.types.Point;
 import jp.jaxa.iss.kibo.rpc.sampleapk.element.Box;
+import jp.jaxa.iss.kibo.rpc.sampleapk.element.Node;
+import org.opencv.core.Mat;
 
 import java.util.*;
 
@@ -11,7 +13,7 @@ import java.util.*;
 
 public class PathPlanUtil {
     private final String TAG = this.getClass().getSimpleName();
-    private final double OFFSET = 0.2f;
+    private final double OFFSET = 0.1f;
 
     private final List<Box> OASIS = Arrays.asList(
             new Box(10.425f + OFFSET, -10.2f + OFFSET, 4.445f + OFFSET, 11.425f - OFFSET, -9.5f - OFFSET, 4.945f - OFFSET),
@@ -25,167 +27,226 @@ public class PathPlanUtil {
             new Box(9.5f + OFFSET, -10.5 + OFFSET, 4.02 + OFFSET, 10.5f - OFFSET, -9.6f - OFFSET, 4.8f - OFFSET)
     );
 
+    final double BASE_OASIS_WEIGHT = 0.3;
+    final double MAX_OASIS_WEIGHT = 0.5;
+    final double STEP = 0.01f;
+
     /*
-     * Plan a path from start→goal:
-     *  - Stays entirely in the union of kizZones.
-     *  - Maximizes travel through oasisZones.
-     *  - Returns the minimal List<Point> of straight-line waypoints.
-     *  - If goal is unreachable, returns as far along the line as possible.
+    TODO:
+        - Find the way that pruning more efficiantly that we still can construct path from `cameform` Set
      */
 
     public List<Point> planPath(Point start, Point goal) {
-        Point D = new Point(
-                goal.getX() - start.getX(),
-                goal.getY() - start.getY(),
-                goal.getZ() - start.getZ()
-        );
+        if(isInKIZ(start)) return Collections.emptyList();
+        if(isInKIZ(goal)) return Collections.emptyList(); // TODO: Implement this later to find furthurest reachable point
 
-        // 1) Find all KIZ intersections
-        List<double[]> kizIv = new ArrayList<>();
-        for (Box kiz : KIZ) {
-            double[] tt = liangBarsky3D(start, D, kiz);
-            if (tt != null) {
-                double t0 = clamp(tt[0], 0, 1);
-                double t1 = clamp(tt[1], 0, 1);
-                if (t0 <= t1) {
-                    kizIv.add(new double[]{t0, t1});
-                }
-            }
-        }
-        List<double[]> kizMerged = mergeIntervals(kizIv);
+        // astar here
+        List<Point> rawPath = aStar(start, goal);
 
-        // 2) If no KIZ intersections, check if start/goal are inside any KIZ
-        if (kizMerged.isEmpty()) {
-            boolean startInKIZ = isPointInAnyZone(start, KIZ);
-            boolean goalInKIZ = isPointInAnyZone(goal, KIZ);
-            if (!startInKIZ || !goalInKIZ) {
-                return Collections.emptyList(); // Path cannot enter KIZ
-            } else {
-                // Entire path is within KIZ (start and goal are inside)
-                return maximizeOasisPath(start, goal, D);
-            }
-        }
 
-        // 3) Clip path to the KIZ segment [t_entry, t_exit]
-        double tEntry = kizMerged.get(0)[0];
-        double tExit = kizMerged.get(kizMerged.size() - 1)[1];
 
-        Point adjustedStart = add(start, scale(D, tEntry));
-        Point adjustedGoal = add(start, scale(D, tExit));
-
-        // 4) Plan path for the clipped segment, maximizing OASIS
-        List<Point> clippedPath = maximizeOasisPath(adjustedStart, adjustedGoal, D);
-
-        // 5) Reconstruct full path with entry/exit points
-        List<Point> fullPath = new ArrayList<>();
-        if (tEntry > 0) fullPath.add(start); // Add original start if outside KIZ
-        fullPath.addAll(clippedPath);
-        if (tExit < 1) fullPath.add(goal); // Add original goal if outside KIZ
-
-        return fullPath;
+        return Collections.emptyList();
     }
 
-    private static double[] liangBarsky3D(Point P0, Point D, Box B) {
-        double t0 = 0f, t1 = 1f;
-        double[] p = {-D.getX(), D.getX(), -D.getY(), D.getY(), -D.getZ(), D.getZ()};
-        double[] q = {
-                P0.getX() - B.xMin, B.xMax - P0.getX(),
-                P0.getY() - B.yMin, B.yMax - P0.getY(),
-                P0.getZ() - B.zMin, B.zMax - P0.getZ()
+    public List<Point> aStar(Point start, Point goal) {
+        double[][] directions = {
+                {STEP,0.0d,0.0d},
+                {-STEP,0.0d,0.0d},
+                {0.0,STEP,0.0},
+                {0.0,-STEP,0.0},
+                {0.0,0.0,STEP},
+                {0.0,0.0,-STEP},
         };
 
-        for(int i = 0; i < 6; i++) {
-            if(p[i] == 0) {
-                if(q[i] < 0) {
-                    return null; // parallel and outside
+        Set<Point> closedSet = new HashSet<>();
+        PriorityQueue<Node> openSet = new PriorityQueue<>(1000);
+        Map<Point, Double> gScore = new HashMap<>(5000);
+        Map<Point, Point> cameFrom = new HashMap<>(5000);
+
+        Point lastestPoint = goal;
+
+        gScore.put(start, 0.0);
+        openSet.add(new Node(start, distance(start, goal)));
+
+        int maxIterations = 10000000;
+        int iterations = 0;
+
+        int memoryCheckInterval = 200;
+        int maxClosedSetSize = 5000;
+
+        while(!openSet.isEmpty() && iterations < maxIterations) {
+            iterations++;
+
+            Node current = openSet.poll();
+            if(distance(current.point, goal) < 0.1) {
+                return reconstructPath(cameFrom, current.point);
+            }
+
+            closedSet.add(current.point);
+            lastestPoint = current.point;
+
+            if(iterations % memoryCheckInterval == 0) {
+                pruneSearchSpace(gScore, cameFrom, current.point, goal);
+
+                if(closedSet.size() > maxClosedSetSize) {
+                    closedSet.clear();
                 }
-            } else {
-                double t = q[i] / p[i];
-                if(p[i] < 0) {
-                    if(t > t1) {
-                        return null; // parallel and outside
-                    } else if(t > t0) {
-                        t0 = t;
-                    }
-                } else {
-                    if(t < t0) {
-                        return null; // parallel and outside
-                    } else if(t < t1) {
-                        t1 = t;
-                    }
-                }
             }
-        }
-        return new double[] { t0, t1 };
-    }
 
-    private static List<double[]> mergeIntervals(List<double[]> in) {
-        Collections.sort(in, new Comparator<double[]>() {
-            @Override
-            public int compare(double[] a, double[] b) {
-                return Double.compare(a[0], b[0]);
-            }
-        });
+            for(double[] direction : directions) {
+                Point neighbor = new Point(
+                        current.point.getX() + direction[0],
+                        current.point.getY() + direction[1],
+                        current.point.getZ() + direction[2]
+                );
 
-        List<double[]> out = new ArrayList<>();
-        for(double[] seg: in) {
-            if(out.isEmpty() || seg[0] > out.get(out.size() - 1)[1]) {
-                out.add(new double[]{seg[0], seg[1]});
-            } else {
-                out.get(out.size() - 1)[1] = Math.max(out.get(out.size() - 1)[1], seg[1]);
-            }
-        }
+                if(closedSet.contains(neighbor) || !isInKIZ(neighbor)) continue;
 
-        return out;
-    }
-
-    private static double clamp(double v, double lo, double hi) {
-        return v < lo ? lo : (Math.min(v, hi));
-    }
-
-    private static Point add(Point a, Point b) {
-        return new Point(a.getX() + b.getX(), a.getY() + b.getY(), a.getZ() + b.getZ());
-    }
-
-    private static Point scale(Point a, double s) {
-        return new Point(a.getX() * s, a.getY() * s, a.getZ() * s);
-    }
-    private List<Point> maximizeOasisPath(Point start, Point goal, Point D) {
-        List<double[]> oasisIv = new ArrayList<>();
-        for (Box oasis : OASIS) {
-            double[] tt = liangBarsky3D(start, D, oasis);
-            if (tt != null) {
-                double t0 = clamp(tt[0], 0, 1);
-                double t1 = clamp(tt[1], 0, 1);
-                if (t0 <= t1) {
-                    oasisIv.add(new double[]{t0, t1});
+                double tentativeGScore = gScore.getOrDefault(current.point, Double.MAX_VALUE) + calculateCost(current.point, neighbor);
+                if(tentativeGScore < gScore.getOrDefault(neighbor, Double.MAX_VALUE)) {
+                    cameFrom.put(neighbor, current.point);
+                    gScore.put(neighbor, tentativeGScore);
+                    openSet.add(new Node(neighbor, tentativeGScore + distance(neighbor, goal)));
                 }
             }
         }
-        List<double[]> oasisMerged = mergeIntervals(oasisIv);
 
-        TreeSet<Double> ts = new TreeSet<>();
-        ts.add(0.0);
-        ts.add(1.0);
-        for (double[] seg : oasisMerged) {
-            ts.add(seg[0]);
-            ts.add(seg[1]);
-        }
-
-        List<Point> waypoints = new ArrayList<>();
-        for (Double t : ts) {
-            waypoints.add(add(start, scale(D, t)));
-        }
-
-        return waypoints;
+        // in case something wrong
+        return reconstructPath(cameFrom, lastestPoint);
     }
-    private boolean isPointInAnyZone(Point p, List<Box> zones) {
-        for (Box zone : zones) {
-            if (p.getX() >= zone.xMin && p.getX() <= zone.xMax &&
-                    p.getY() >= zone.yMin && p.getY() <= zone.yMax &&
-                    p.getZ() >= zone.zMin && p.getZ() <= zone.zMax) {
-                return true;
+
+    private double distance(Point a, Point b) {
+        return Math.sqrt(
+                Math.pow(a.getX() - b.getX(), 2) +
+                Math.pow(a.getY() - b.getY(), 2) +
+                Math.pow(a.getZ() - b.getZ(), 2)
+        );
+    }
+
+    private double calculateCost(Point a, Point b) {
+        double baseCost = distance(a, b);
+        double oasisRatio = calculateOasisCoverage(a, b);
+        double dynamicWeight = BASE_OASIS_WEIGHT +
+                (MAX_OASIS_WEIGHT - BASE_OASIS_WEIGHT) * oasisRatio;
+
+        double bonus = dynamicWeight * Math.pow(oasisRatio, 1.5);
+        return baseCost * (1.0 - bonus);
+    }
+
+    private double calculateOasisCoverage(Point a, Point b) {
+        double totalDistance = distance(a, b);
+        double oasisDistance = 0.0;
+
+        for(Box oasis: OASIS) {
+            double[] t = LiangBarsky.liangBarsky3D(a, b, oasis);
+            if(t != null) {
+                oasisDistance += (t[1] - t[0]) * totalDistance;
             }
+        }
+
+        double cappedOasis = Math.min(oasisDistance, totalDistance);
+
+        return cappedOasis / totalDistance;
+    }
+
+    private List<Point> simplyfyPathWithRayCasting(List<Point> path) {
+        if(path.size() < 2) return path;
+
+        List<Point> simplified = new ArrayList<>();
+        simplified.add(path.get(0));
+        int lastKeptIndex = 0;
+
+        for(int i = 1; i < path.size(); i++)  {
+            Point candidate = path.get(i);
+            Point lastKept = simplified.get(simplified.size() - 1);
+
+            if(!isSegmentInKIZ(lastKept, candidate)) {
+                simplified.add(path.get(i - 1));
+                lastKeptIndex = i - 1;
+                continue;
+            }
+        }
+
+        return simplified;
+    }
+
+    private void pruneSearchSpace(Map<Point, Double> gScore, Map<Point, Point> cameFrom, Point current, Point goal) {
+        double bestScore = gScore.getOrDefault(current, Double.MAX_VALUE);
+
+        double threshold = bestScore * 2.0;
+
+        Iterator<Map.Entry<Point, Double>> iterator = gScore.entrySet().iterator();
+        Set<Point> toRemove = new HashSet<>();
+
+        while(iterator.hasNext()) {
+            Map.Entry<Point, Double> entry = iterator.next();
+            if(entry.getValue() > threshold) {
+                toRemove.add(entry.getKey());
+            }
+        }
+
+        for(Point point : toRemove) {
+            gScore.remove(point);
+            cameFrom.remove(point);
+        }
+
+        if(gScore.size() > 5000) {
+            List<Map.Entry<Point, Double>> entries = new ArrayList<>(gScore.entrySet());
+
+            int removeCount = entries.size() / 2;
+            for(int i = removeCount; i<entries.size(); i++) {
+                Point key = entries.get(i).getKey();
+                gScore.remove(key);
+                cameFrom.remove(key);
+            }
+        }
+    }
+
+    private boolean isSegmentInKIZ(Point a, Point b) {
+        Point D = new Point(
+                b.getX() - a.getX(),
+                b.getY() - a.getY(),
+                b.getZ() - a.getZ()
+        );
+
+        List<double[]> intervals = new ArrayList<>();
+
+        Box kiz = KIZ.get(0);
+        double[] t = LiangBarsky.liangBarsky3D(a, D, kiz);
+        if(t != null) {
+            intervals.add(new double[]{Math.max(t[0], 0), Math.min(t[1], 1)});
+        }
+
+        List<double[]> mergedIntervals = LiangBarsky.mergeIntervals(intervals);
+        return isFullIntervalCovered(mergedIntervals);
+    }
+
+    private boolean isFullIntervalCovered(List<double[]> intervals) {
+        if(intervals.isEmpty()) return false;
+        double lastEnd = intervals.get(0)[0];
+        for(double[] interval : intervals) {
+            if(interval[0] > lastEnd) return false;
+
+            lastEnd = Math.max(lastEnd, interval[1]);
+        }
+        return lastEnd >= 1.0;
+    }
+
+    private List<Point> reconstructPath(Map<Point, Point> cameFrom, Point current) {
+        List<Point> path = new ArrayList<>();
+        while(current != null) {
+            path.add(current);
+            current = cameFrom.get(current);
+        }
+        Collections.reverse(path);
+        return path;
+    }
+    private boolean isInKIZ(Point p) {
+        Box box = KIZ.get(0);
+        if(p.getX() >= box.xMin && p.getX() <= box.xMax &&
+                p.getY() >= box.yMin && p.getY() <= box.yMax &&
+                p.getZ() >= box.zMin && p.getZ() <= box.zMax) {
+            return true;
         }
         return false;
     }
