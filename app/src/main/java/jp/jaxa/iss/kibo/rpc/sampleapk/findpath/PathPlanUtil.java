@@ -2,9 +2,12 @@ package jp.jaxa.iss.kibo.rpc.sampleapk.findpath;
 
 import gov.nasa.arc.astrobee.types.Point;
 import jp.jaxa.iss.kibo.rpc.sampleapk.element.Box;
+import jp.jaxa.iss.kibo.rpc.sampleapk.element.Edge;
 import jp.jaxa.iss.kibo.rpc.sampleapk.element.Node;
+import jp.jaxa.iss.kibo.rpc.sampleapk.element.SpatialIndex;
 import org.opencv.core.Mat;
 
+import java.nio.file.Path;
 import java.util.*;
 
 /*
@@ -27,52 +30,73 @@ public class PathPlanUtil {
             new Box(9.5f + OFFSET, -10.5 + OFFSET, 4.02 + OFFSET, 10.5f - OFFSET, -9.6f - OFFSET, 4.8f - OFFSET)
     );
 
-    final double BASE_OASIS_WEIGHT = 0.3;
-    final double MAX_OASIS_WEIGHT = 0.5;
-    final double STEP = 0.01f;
+    final double BASE_OASIS_WEIGHT = 0.9f;
+    final double MAX_OASIS_WEIGHT = 1.0f;
+    final double STEP = 0.2f;
+    final double COST_SAFETY_FACTOR = 1.5f;
+    final int MAX_NODE_COUNT = 5000;
+    final double RADIUS_NEARBY = 2.0f;
 
-    /*
-    TODO:
-        - Find the way that pruning more efficiantly that we still can construct path from `cameform` Set
-     */
+    private static Map<Point, List<Edge>> precomputedGraph;
+    private final SpatialIndex sptialIndex = new SpatialIndex();
 
-    public List<Point> planPath(Point start, Point goal) {
-        if(isInKIZ(start)) return Collections.emptyList();
-        if(isInKIZ(goal)) return Collections.emptyList(); // TODO: Implement this later to find furthurest reachable point
-
-        // astar here
-        List<Point> rawPath = aStar(start, goal);
-
-
-
-        return Collections.emptyList();
+    public PathPlanUtil() {
+        this.initializeGraph();
     }
 
-    public List<Point> aStar(Point start, Point goal) {
-        double[][] directions = {
-                {STEP,0.0d,0.0d},
-                {-STEP,0.0d,0.0d},
-                {0.0,STEP,0.0},
-                {0.0,-STEP,0.0},
-                {0.0,0.0,STEP},
-                {0.0,0.0,-STEP},
-        };
+    public List<Point> planPath(Point start, Point goal) {
 
+        if(!isInKIZ(goal)) {
+            List<Point> candidatePoint = findNearbyNodes(goal, RADIUS_NEARBY);
+            final Point tmpGoal = goal;
+            Collections.sort(candidatePoint, new Comparator<Point>() {
+                @Override
+                public int compare(Point p1, Point p2) {
+                    double score1 = distance(p1, tmpGoal);
+                    double score2 = distance(p2, tmpGoal);
+                    return Double.compare(score1, score2);
+                }
+            });
+            goal = candidatePoint.get(0);
+        }
+
+        Map<Point, List<Edge>> workingGraph = new HashMap<>(precomputedGraph);
+        connectToGraph(start, workingGraph);
+        connectToGraph(goal, workingGraph);
+
+        return aStar(start, goal, workingGraph);
+    }
+
+    private void connectToGraph(Point point, Map<Point, List<Edge>> graph) {
+       List<Point> nearbyNodes = findNearbyNodes(point, RADIUS_NEARBY);
+        for(Point node : nearbyNodes) {
+            if(!isSegmentInKIZ(point, node)) continue;
+
+            double cost = calculateCost(point, node);
+            List<Edge> list = graph.get(point);
+            if(list == null) {
+                list = new ArrayList<Edge>();
+                graph.put(point, list);
+            }
+            list.add(new Edge(node, cost));
+        }
+    }
+
+    private List<Point> findNearbyNodes(Point query, double radius) {
+        return sptialIndex.query(query, radius);
+    }
+
+    private List<Point> aStar(Point start, Point goal, Map<Point, List<Edge>> graph) {
         Set<Point> closedSet = new HashSet<>();
         PriorityQueue<Node> openSet = new PriorityQueue<>(1000);
         Map<Point, Double> gScore = new HashMap<>(5000);
         Map<Point, Point> cameFrom = new HashMap<>(5000);
-
-        Point lastestPoint = goal;
 
         gScore.put(start, 0.0);
         openSet.add(new Node(start, distance(start, goal)));
 
         int maxIterations = 10000000;
         int iterations = 0;
-
-        int memoryCheckInterval = 200;
-        int maxClosedSetSize = 5000;
 
         while(!openSet.isEmpty() && iterations < maxIterations) {
             iterations++;
@@ -83,36 +107,24 @@ public class PathPlanUtil {
             }
 
             closedSet.add(current.point);
-            lastestPoint = current.point;
 
-            if(iterations % memoryCheckInterval == 0) {
-                pruneSearchSpace(gScore, cameFrom, current.point, goal);
+//            System.out.println("Current: " + current.point.toString() + " fScore: " + current.fScore);
 
-                if(closedSet.size() > maxClosedSetSize) {
-                    closedSet.clear();
-                }
-            }
+            for(Edge edge : graph.getOrDefault(current.point, Collections.<Edge>emptyList())) {
 
-            for(double[] direction : directions) {
-                Point neighbor = new Point(
-                        current.point.getX() + direction[0],
-                        current.point.getY() + direction[1],
-                        current.point.getZ() + direction[2]
-                );
+                if (closedSet.contains(edge.toNode)) continue;
 
-                if(closedSet.contains(neighbor) || !isInKIZ(neighbor)) continue;
-
-                double tentativeGScore = gScore.getOrDefault(current.point, Double.MAX_VALUE) + calculateCost(current.point, neighbor);
-                if(tentativeGScore < gScore.getOrDefault(neighbor, Double.MAX_VALUE)) {
-                    cameFrom.put(neighbor, current.point);
-                    gScore.put(neighbor, tentativeGScore);
-                    openSet.add(new Node(neighbor, tentativeGScore + distance(neighbor, goal)));
+                double tentativeGScore = gScore.getOrDefault(current.point, Double.MAX_VALUE) + edge.cost;
+                if(tentativeGScore < gScore.getOrDefault(edge.toNode, Double.MAX_VALUE)) {
+                    cameFrom.put(edge.toNode, current.point);
+                    gScore.put(edge.toNode, tentativeGScore);
+                    openSet.add(new Node(edge.toNode, tentativeGScore + distance(edge.toNode, goal)));
                 }
             }
         }
 
         // in case something wrong
-        return reconstructPath(cameFrom, lastestPoint);
+        return reconstructPath(cameFrom, goal);
     }
 
     private double distance(Point a, Point b) {
@@ -129,8 +141,7 @@ public class PathPlanUtil {
         double dynamicWeight = BASE_OASIS_WEIGHT +
                 (MAX_OASIS_WEIGHT - BASE_OASIS_WEIGHT) * oasisRatio;
 
-        double bonus = dynamicWeight * Math.pow(oasisRatio, 1.5);
-        return baseCost * (1.0 - bonus);
+        return baseCost * (1.0 - dynamicWeight);
     }
 
     private double calculateOasisCoverage(Point a, Point b) {
@@ -149,55 +160,85 @@ public class PathPlanUtil {
         return cappedOasis / totalDistance;
     }
 
-    private List<Point> simplyfyPathWithRayCasting(List<Point> path) {
-        if(path.size() < 2) return path;
+    private void initializeGraph() {
+        Set<Point> nodes = new HashSet<>();
 
-        List<Point> simplified = new ArrayList<>();
-        simplified.add(path.get(0));
-        int lastKeptIndex = 0;
+        nodes.addAll(KIZ.get(0).getVertices());
+        nodes.addAll(KIZ.get(0).getNodes());
 
-        for(int i = 1; i < path.size(); i++)  {
-            Point candidate = path.get(i);
-            Point lastKept = simplified.get(simplified.size() - 1);
-
-            if(!isSegmentInKIZ(lastKept, candidate)) {
-                simplified.add(path.get(i - 1));
-                lastKeptIndex = i - 1;
-                continue;
-            }
+        for(Box oasis : OASIS) {
+            nodes.addAll(oasis.getVertices());
+            nodes.addAll(oasis.getNodes());
         }
 
-        return simplified;
+        precomputedGraph = buildVisibilityGraph(nodes);
+
+        for(Point node : nodes) {
+            sptialIndex.insert(node);
+        }
+
     }
 
-    private void pruneSearchSpace(Map<Point, Double> gScore, Map<Point, Point> cameFrom, Point current, Point goal) {
-        double bestScore = gScore.getOrDefault(current, Double.MAX_VALUE);
+    private Map<Point, List<Edge>> buildVisibilityGraph(Set<Point> nodes) {
+       Map<Point, List<Edge>>  graph = new HashMap<>();
 
-        double threshold = bestScore * 2.0;
+       for(Point a : nodes) {
+           for(Point b : nodes) {
+               if(a.equals(b) || !isSegmentInKIZ(a, b)) continue;
+
+               double cost = calculateCost(a, b);
+               List<Edge> list = graph.get(a);
+               if(list == null) {
+                   list = new ArrayList<Edge>();
+                   graph.put(a, list);
+               }
+               list.add(new Edge(b, cost));
+           }
+       }
+
+       return graph;
+    }
+
+    private void pruneSearchSpace(
+            final Map<Point, Double> gScore,
+            Map<Point, Point> cameFrom,
+            Point current, Point start, Point goal,
+            List<Point> currentBestPath
+    ) {
+        double bestScore = gScore.getOrDefault(current, Double.MAX_VALUE);
+        double threshold = bestScore * COST_SAFETY_FACTOR;
 
         Iterator<Map.Entry<Point, Double>> iterator = gScore.entrySet().iterator();
-        Set<Point> toRemove = new HashSet<>();
 
         while(iterator.hasNext()) {
             Map.Entry<Point, Double> entry = iterator.next();
-            if(entry.getValue() > threshold) {
-                toRemove.add(entry.getKey());
-            }
+            Point p = entry.getKey();
+            double cost = entry.getValue();
+
+            if(currentBestPath.contains(p)
+                    || p.equals(start)
+                    || p.equals(goal)
+                    || cost <= threshold) continue;
+
+            iterator.remove();
+            cameFrom.remove(p);
         }
 
-        for(Point point : toRemove) {
-            gScore.remove(point);
-            cameFrom.remove(point);
-        }
+        if(gScore.size()  > MAX_NODE_COUNT) {
+            List<Point> nodes = new ArrayList<>(gScore.keySet());
+            Collections.sort(nodes, new Comparator<Point>() {
+                @Override
+                public int compare(Point p1, Point p2) {
+                    double score1 = gScore.get(p1);
+                    double score2 = gScore.get(p2);
+                    return Double.compare(score1, score2);
+                }
+            });
 
-        if(gScore.size() > 5000) {
-            List<Map.Entry<Point, Double>> entries = new ArrayList<>(gScore.entrySet());
-
-            int removeCount = entries.size() / 2;
-            for(int i = removeCount; i<entries.size(); i++) {
-                Point key = entries.get(i).getKey();
-                gScore.remove(key);
-                cameFrom.remove(key);
+            for(int i = MAX_NODE_COUNT; i < nodes.size(); i++) {
+                Point p = nodes.get(i);
+                gScore.remove(p);
+                cameFrom.remove(p);
             }
         }
     }
@@ -243,11 +284,8 @@ public class PathPlanUtil {
     }
     private boolean isInKIZ(Point p) {
         Box box = KIZ.get(0);
-        if(p.getX() >= box.xMin && p.getX() <= box.xMax &&
+        return p.getX() >= box.xMin && p.getX() <= box.xMax &&
                 p.getY() >= box.yMin && p.getY() <= box.yMax &&
-                p.getZ() >= box.zMin && p.getZ() <= box.zMax) {
-            return true;
-        }
-        return false;
+                p.getZ() >= box.zMin && p.getZ() <= box.zMax;
     }
 }

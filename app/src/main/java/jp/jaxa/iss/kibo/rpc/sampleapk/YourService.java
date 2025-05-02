@@ -13,27 +13,57 @@ import java.util.List;
 
 /**
  * Class meant to handle commands from the Ground Data System and execute them in Astrobee.
+ * TODO: management about the memory again
  */
 
 public class YourService extends KiboRpcService {
     private final String TAG = this.getClass().getSimpleName();
-    private final PathPlanUtil planner = new PathPlanUtil();
 
     @Override
     protected void runPlan1(){
         api.startMission(); // Start Mission
 
-        Point targetPoint = new Point(9.867f, -6.85f, 4.945f); //Area 4
+        // memeory leaked
+        final PathPlanUtil planner = new PathPlanUtil();
+        List<Point> path = null;
 
-        List<Point> testPath = planner.planPath(api.getRobotKinematics().getPosition(), targetPoint);
+        Point startingPoint = new Point(10.553, -9.788, 4.599);
+        Point targetPoint1 = new Point(10.95f, -10.58, 5.195);
+        Point targetPoint2 = new Point(10.9f, -8.875f, 3.726);
+        Point targetPoint3 = new Point(10.925f, -7.95f, 3.726);
+        Point targetPoint4 = new Point(9.867f, -6.85f, 4.945f);
 
-        Log.i(TAG, "Current Position: " + api.getRobotKinematics().getPosition().toString());
-        for(Point p : testPath) {
-            Log.i(TAG, "Moving to: " + p.toString());
-            move(p, 0f, 0f, 0f, 0f);
+        Log.i(TAG, "moving to startingPoint");
+        path = planner.planPath(api.getRobotKinematics().getPosition(), startingPoint);
+        for(int i = 1; i < path.size(); i++){
+            move(path.get(i), 0, 0, 0, 1);
         }
 
+        Log.i(TAG, "moving to targetPoint1");
+        path = planner.planPath(api.getRobotKinematics().getPosition(), targetPoint1);
+        for(int i = 1; i < path.size(); i++){
+            move(path.get(i), 0, 0, 0, 1);
+        }
 
+        Log.i(TAG, "moving to targetPoint2");
+        path = planner.planPath(api.getRobotKinematics().getPosition(), targetPoint2);
+        for(int i = 1; i < path.size(); i++){
+            move(path.get(i), 0, 0, 0, 1);
+        }
+
+        Log.i(TAG, "moving to targetPoint3");
+        path = planner.planPath(api.getRobotKinematics().getPosition(), targetPoint3);
+        for(int i = 1; i < path.size(); i++){
+            move(path.get(i), 0, 0, 0, 1);
+        }
+
+        Log.i(TAG, "moving to targetPoint4");
+        path = planner.planPath(api.getRobotKinematics().getPosition(), targetPoint4);
+        for(int i = 1; i < path.size(); i++){
+            move(path.get(i), 0, 0, 0, 1);
+        }
+
+        Log.i(TAG, "Testing Done!!!");
         api.shutdownFactory();
         return;
     }
