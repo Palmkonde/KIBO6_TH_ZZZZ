@@ -11,7 +11,18 @@ import java.nio.file.Path;
 import java.util.*;
 
 /*
-    Using Liang-Barsky algorithm to find the shortest path between two points in a grid.
+    Usage use only `planPath` method by giving starting and ending point
+
+    Args:
+        - Point start
+            starting Point normally use the robot current position
+        - Point goal
+            goal Point where would you like to go
+
+    Returns:
+        - List<Point>
+            The list of path include [start, ..., goal]
+    Note that: Don't worry about goal point isn't inside the KIZ. The algorithm will adjust it by itself.
  */
 
 public class PathPlanUtil {
