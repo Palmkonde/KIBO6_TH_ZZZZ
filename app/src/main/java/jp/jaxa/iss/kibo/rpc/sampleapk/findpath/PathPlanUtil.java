@@ -35,7 +35,7 @@ public class PathPlanUtil {
     final double STEP = 0.2f;
     final double COST_SAFETY_FACTOR = 1.5f;
     final int MAX_NODE_COUNT = 5000;
-    final double RADIUS_NEARBY = 2.0f;
+    final double RADIUS_NEARBY = 0.7f;
 
     private static Map<Point, List<Edge>> precomputedGraph;
     private final SpatialIndex sptialIndex = new SpatialIndex();
@@ -47,38 +47,71 @@ public class PathPlanUtil {
     public List<Point> planPath(Point start, Point goal) {
 
         if(!isInKIZ(goal)) {
-            List<Point> candidatePoint = findNearbyNodes(goal, RADIUS_NEARBY);
-            final Point tmpGoal = goal;
-            Collections.sort(candidatePoint, new Comparator<Point>() {
-                @Override
-                public int compare(Point p1, Point p2) {
-                    double score1 = distance(p1, tmpGoal);
-                    double score2 = distance(p2, tmpGoal);
-                    return Double.compare(score1, score2);
-                }
-            });
-            goal = candidatePoint.get(0);
+            goal = changeGoal(goal);
+            System.out.println("Change goal to: " + goal);
         }
 
         Map<Point, List<Edge>> workingGraph = new HashMap<>(precomputedGraph);
-        connectToGraph(start, workingGraph);
-        connectToGraph(goal, workingGraph);
+        connectToGraph(start, workingGraph, false);
+        connectToGraph(goal, workingGraph, true);
 
         return aStar(start, goal, workingGraph);
     }
 
-    private void connectToGraph(Point point, Map<Point, List<Edge>> graph) {
-       List<Point> nearbyNodes = findNearbyNodes(point, RADIUS_NEARBY);
-        for(Point node : nearbyNodes) {
-            if(!isSegmentInKIZ(point, node)) continue;
+    private Point changeGoal(Point goal) {
+        double[][] directions = {
+                {1, 0, 0},
+                {-1, 0, 0},
+                {0, 1, 0},
+                {0, -1, 0},
+                {0, 0, 1},
+                {0, 0, -1}
+        };
 
-            double cost = calculateCost(point, node);
-            List<Edge> list = graph.get(point);
-            if(list == null) {
-                list = new ArrayList<Edge>();
-                graph.put(point, list);
+        Point newGoal = null;
+
+        for(int i=1; i<=5; i++) {
+            for(double[] direction : directions) {
+                newGoal = new Point(
+                    goal.getX() + direction[0] * STEP * i,
+                    goal.getY() + direction[1] * STEP * i,
+                    goal.getZ() + direction[2] * STEP * i
+                );
+                if(isInKIZ(newGoal)) {
+                    return newGoal;
+                }
             }
-            list.add(new Edge(node, cost));
+        }
+
+        return newGoal;
+    }
+
+    private void connectToGraph(Point point, Map<Point, List<Edge>> graph, boolean isGoal) {
+        List<Point> nearbyNodes = findNearbyNodes(point, RADIUS_NEARBY);
+        if(!isGoal) {
+            for(Point node : nearbyNodes) {
+                if(!isSegmentInKIZ(point, node)) continue;
+
+                double cost = calculateCost(point, node);
+                List<Edge> list = graph.get(point);
+                if(list == null) {
+                    list = new ArrayList<Edge>();
+                    graph.put(point, list);
+                }
+                list.add(new Edge(node, cost));
+            }
+        }
+        else {
+            for(Point node : nearbyNodes) {
+                if(!isSegmentInKIZ(node, point)) continue;
+                double cost = calculateCost(node, point);
+                List<Edge> list = graph.get(node);
+                if(list == null) {
+                    list = new ArrayList<Edge>();
+                    graph.put(node, list);
+                }
+                list.add(new Edge(point, cost));
+            }
         }
     }
 
@@ -88,34 +121,51 @@ public class PathPlanUtil {
 
     private List<Point> aStar(Point start, Point goal, Map<Point, List<Edge>> graph) {
         Set<Point> closedSet = new HashSet<>();
-        PriorityQueue<Node> openSet = new PriorityQueue<>(1000);
-        Map<Point, Double> gScore = new HashMap<>(5000);
-        Map<Point, Point> cameFrom = new HashMap<>(5000);
+        PriorityQueue<Node> openSet = new PriorityQueue<>();
+        Map<Point, Double> gScore = new HashMap<>();
+        Map<Point, Point> cameFrom = new HashMap<>();
 
         gScore.put(start, 0.0);
+        cameFrom.put(start, null);
         openSet.add(new Node(start, distance(start, goal)));
 
-        int maxIterations = 10000000;
+        int maxIterations = 100000;
         int iterations = 0;
+
+//        System.out.println("Check edge to goal");
+//        for(Edge edge : graph.getOrDefault(goal, Collections.<Edge>emptyList())) {
+//            System.out.println("Edge to goal: " + edge.toNode + " cost: " + edge.cost + " distance: " + distance(edge.toNode, goal));
+//        }
+//
+//        System.out.println("Check edge to start");
+//        for(Edge edge : graph.getOrDefault(start, Collections.<Edge>emptyList())) {
+//            System.out.println("Edge to start: " + edge.toNode + " cost: " + edge.cost + " distance: " + distance(edge.toNode, start));
+//        }
 
         while(!openSet.isEmpty() && iterations < maxIterations) {
             iterations++;
 
             Node current = openSet.poll();
-            if(distance(current.point, goal) < 0.1) {
+            if(current.point.equals(goal)) {
+//                System.out.println("Found goal: " + current.point);
                 return reconstructPath(cameFrom, current.point);
             }
 
+            if(closedSet.contains(current.point)) continue;
             closedSet.add(current.point);
 
-//            System.out.println("Current: " + current.point.toString() + " fScore: " + current.fScore);
+//            System.out.println("Current Point: " + current.point + " Distance: " + distance(current.point, goal) + " fscore: " + current.fScore);
 
-            for(Edge edge : graph.getOrDefault(current.point, Collections.<Edge>emptyList())) {
+            for(Edge edge : graph.containsKey(current.point) ? graph.get(current.point) : Collections.<Edge>emptyList()) {
 
                 if (closedSet.contains(edge.toNode)) continue;
 
-                double tentativeGScore = gScore.getOrDefault(current.point, Double.MAX_VALUE) + edge.cost;
-                if(tentativeGScore < gScore.getOrDefault(edge.toNode, Double.MAX_VALUE)) {
+
+                double gScore_now = (gScore.containsKey(current.point) ? gScore.get(current.point) : Double.MAX_VALUE);
+                double gScore_to = (gScore.containsKey(edge.toNode) ? gScore.get(edge.toNode) : Double.MAX_VALUE);
+                double tentativeGScore =  gScore_now + edge.cost;
+//                System.out.println("Edge: " + edge.toNode + " gScore: " + gScore_to + " tentativeGScore: " + tentativeGScore);
+                if(tentativeGScore < gScore_to) {
                     cameFrom.put(edge.toNode, current.point);
                     gScore.put(edge.toNode, tentativeGScore);
                     openSet.add(new Node(edge.toNode, tentativeGScore + distance(edge.toNode, goal)));
@@ -123,7 +173,6 @@ public class PathPlanUtil {
             }
         }
 
-        // in case something wrong
         return reconstructPath(cameFrom, goal);
     }
 
@@ -138,8 +187,10 @@ public class PathPlanUtil {
     private double calculateCost(Point a, Point b) {
         double baseCost = distance(a, b);
         double oasisRatio = calculateOasisCoverage(a, b);
-        double dynamicWeight = BASE_OASIS_WEIGHT +
-                (MAX_OASIS_WEIGHT - BASE_OASIS_WEIGHT) * oasisRatio;
+
+        double dynamicWeight = BASE_OASIS_WEIGHT + (MAX_OASIS_WEIGHT - BASE_OASIS_WEIGHT) * oasisRatio;
+
+        dynamicWeight = Math.max(0.0, Math.min(1.0, dynamicWeight));
 
         return baseCost * (1.0 - dynamicWeight);
     }
@@ -162,9 +213,6 @@ public class PathPlanUtil {
 
     private void initializeGraph() {
         Set<Point> nodes = new HashSet<>();
-
-        nodes.addAll(KIZ.get(0).getVertices());
-        nodes.addAll(KIZ.get(0).getNodes());
 
         for(Box oasis : OASIS) {
             nodes.addAll(oasis.getVertices());
@@ -189,7 +237,7 @@ public class PathPlanUtil {
                double cost = calculateCost(a, b);
                List<Edge> list = graph.get(a);
                if(list == null) {
-                   list = new ArrayList<Edge>();
+                   list = new ArrayList<>();
                    graph.put(a, list);
                }
                list.add(new Edge(b, cost));

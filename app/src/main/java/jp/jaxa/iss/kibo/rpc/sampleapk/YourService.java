@@ -24,8 +24,8 @@ public class YourService extends KiboRpcService {
         api.startMission(); // Start Mission
 
         // memeory leaked
-        final PathPlanUtil planner = new PathPlanUtil();
         List<Point> path = null;
+        final PathPlanUtil planner = new PathPlanUtil();
 
         Point startingPoint = new Point(10.553, -9.788, 4.599);
         Point targetPoint1 = new Point(10.95f, -10.58, 5.195);
