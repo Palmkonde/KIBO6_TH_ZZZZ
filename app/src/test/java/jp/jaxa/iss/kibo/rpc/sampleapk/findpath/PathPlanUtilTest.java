@@ -20,7 +20,7 @@ public class PathPlanUtilTest {
         Point targetPoint3 = new Point(10.925f, -7.95f, 3.726);
         Point targetPoint4 = new Point(9.867f, -6.85f, 4.945f);
 
-        List<Point> path = pathPlanUtil.planPath(startingPoint, targetPoint4);
+        List<Point> path = pathPlanUtil.planPath(startingPoint, targetPoint2);
 
         System.out.println("Current Position: " + startingPoint.toString());
         for(Point p : path) {

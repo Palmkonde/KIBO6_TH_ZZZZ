@@ -41,12 +41,12 @@ public class PathPlanUtil {
             new Box(9.5f + OFFSET, -10.5 + OFFSET, 4.02 + OFFSET, 10.5f - OFFSET, -9.6f - OFFSET, 4.8f - OFFSET)
     );
 
-    final double BASE_OASIS_WEIGHT = 0.9f;
-    final double MAX_OASIS_WEIGHT = 1.0f;
+    final double BASE_OASIS_WEIGHT = 0.3f;
+    final double MAX_OASIS_WEIGHT = 0.5f;
     final double STEP = 0.2f;
     final double COST_SAFETY_FACTOR = 1.5f;
     final int MAX_NODE_COUNT = 5000;
-    final double RADIUS_NEARBY = 0.7f;
+    final double RADIUS_NEARBY = 0.825f;
 
     private static Map<Point, List<Edge>> precomputedGraph;
     private final SpatialIndex sptialIndex = new SpatialIndex();
@@ -230,19 +230,20 @@ public class PathPlanUtil {
             nodes.addAll(oasis.getNodes());
         }
 
-        precomputedGraph = buildVisibilityGraph(nodes);
-
         for(Point node : nodes) {
             sptialIndex.insert(node);
         }
 
+        precomputedGraph = buildVisibilityGraph(nodes);
     }
 
     private Map<Point, List<Edge>> buildVisibilityGraph(Set<Point> nodes) {
        Map<Point, List<Edge>>  graph = new HashMap<>();
 
+       // a -> b
        for(Point a : nodes) {
-           for(Point b : nodes) {
+           List<Point> nearbyNodes = findNearbyNodes(a, RADIUS_NEARBY);
+           for(Point b : nearbyNodes) {
                if(a.equals(b) || !isSegmentInKIZ(a, b)) continue;
 
                double cost = calculateCost(a, b);
