@@ -5,14 +5,14 @@
  * Author : Pandaree Somnueknaitham
  * Team : ZZZZ (Thailand)
  * Start date : 29 April 2025
- * Last update : 4 May 2025
+ * Last update : 11 May 2025
  *
  * 1st Day 29/4 study built in class and method
  * 2nd Day 30/4 improve plane method
  * 3rd Day 1/5 improve zone method
  * 4th Day 2/5 improve corner point method
  * 5th Day 4/5 improve score point position method
- *
+ * 6th Day 11/5 comment in detail
  */
 
 package jp.jaxa.iss.kibo.rpc.sampleapk;
@@ -62,7 +62,7 @@ public class YourService extends KiboRpcService {
     protected static final Point oasis4MinXYZ =  new Point(10.925d, -7.4d,4.425d);
     protected static final Point Oasis4MaxXYZ =  new Point(11.425d, -6.35d,4.945d);
 
-    // KIZ's coordinated
+    // KIZ's coordinates
     protected static final Point kiz1MinPoint = new Point(10.3d,-10.2d,4.32d);
     protected static final Point kiz1MaxPoint = new Point(11.55d,-6.0d,5.57);
     protected static final Point kiz2MinPoint = new Point(9.5d,-10.5d,4.02);
@@ -94,58 +94,58 @@ public class YourService extends KiboRpcService {
     protected static final Point area4MinXYZ = new Point(9.866984, -7.34,4.32);
     protected static final Point area4MaxXYZ = new Point(9.866984, -6.365, 5.57);
 
+    // Astrobee measures
+    protected static double xAstrobee = 0.32d;
+    protected static double yAstrobee = 0.32d;
+    protected static double zAstrobee = 0.32d;
 
-
-//    protected String[] itemName = { "coin", "compass", "coral", "crystal", "diamond", "emerald", "fossil", "key", "letter", "shell", "treasure_box" };
+    // For image processing part
     protected String[] TEMPLATE_FILE_NAME = {"coin.png", "compass.png", "coral.png", "crystal.png", "diamond.png", "emerald.png", "fossil.png", "key.png", "letter.png", "shell.png", "treasure_box.png"};
 
-    /** Method to detect plane from point (for KIZ1) */
-    protected static String detectPlane(Point p1, Point p2, Point p3, Point p4) {
-        String plane;
+    /** Method to detect plane from four corner points (for KIZ1) */
+    // Input : 4 corner points
+    // Output : Plane name
+    protected static String getPlane(Point p1, Point p2, Point p3, Point p4) {
+        String plane = "";
+
         if((p1.getX() == p2.getX() && p2.getX() == p3.getX() && p3.getX() == p4.getX()) ) {
             if( Math.abs(kiz1MinPoint.getX() - p1.getX()) < Math.abs(kiz1MaxPoint.getX() - p1.getX()) ) {
                 plane = "-YZ"; // Dock side, X- side
-                return plane;
             } else if (Math.abs(kiz1MinPoint.getX() - p1.getX()) > Math.abs(kiz1MaxPoint.getX() - p1.getX()) ) {
                 plane = "YZ"; // Opposite Dock side, X+ side
-                return plane;
             }
         }
 
         if((p1.getY() == p2.getY() && p2.getY() == p3.getY() && p3.getY() == p4.getY()) ) {
             if( Math.abs(kiz1MinPoint.getY() - p1.getY()) < Math.abs(kiz1MaxPoint.getY() - p1.getY()) ) {
                 plane = "-XZ"; // P start side, Y- side
-                return plane;
             } else if (Math.abs(kiz1MinPoint.getY() - p1.getY()) > Math.abs(kiz1MaxPoint.getY() - p1.getY()) ) {
                 plane = "XZ"; // P astronaut side, Y+ side
-                return plane;
             }
         }
 
         if((p1.getZ() == p2.getZ() && p2.getZ() == p3.getZ() && p3.getZ() == p4.getZ()) ) {
             if( Math.abs(kiz1MinPoint.getZ() - p1.getZ()) < Math.abs(kiz1MaxPoint.getZ() - p1.getZ()) ) {
                 plane = "XY"; // Z- side
-                return plane;
             } else if (Math.abs(kiz1MinPoint.getZ() - p1.getZ()) > Math.abs(kiz1MaxPoint.getZ() - p1.getZ()) ) {
                 plane = "-XY"; // Z+ side
-                return plane;
             }
         }
-        return null;
+        return plane;
     }
 
-    /** Method to detect plane from point (for KIZ1)*/
-    protected static String detectPlane(double xMin, double yMin, double zMin, double xMax, double yMax, double zMax){
-        String plane;
+    /** Method to detect plane from six point (for KIZ1)*/
+    // Input : 6 coordinates from min max table in rulebook
+    // Output : Plane name
+    protected static String getPlane(double xMin, double yMin, double zMin, double xMax, double yMax, double zMax){
+        String plane = "";
 
         if(xMin == xMax ) {
             double x = xMin;
             if( (Math.abs(xMinKIZ1 - x)) < (Math.abs(xMaxKIZ1 - x)) ) {
                 plane = "-YZ"; // Dock side, X- side
-                return plane;
             } else if ((Math.abs(xMinKIZ1 - x)) > (Math.abs(xMaxKIZ1 - x)) ) {
                 plane = "YZ"; // Opposite Dock side, X+ side
-                return plane;
             }
         }
 
@@ -153,10 +153,8 @@ public class YourService extends KiboRpcService {
             double y = yMin;
             if( (Math.abs(yMinKIZ1 - y)) < (Math.abs(yMaxKIZ1 - y)) ) {
                 plane = "-XZ"; // P start side, Y- side
-                return plane;
             } else if ((Math.abs(yMinKIZ1 - y)) > (Math.abs(yMaxKIZ1 - y))) {
                 plane = "XZ"; // P astronaut side, Y+ side
-                return plane;
             }
         }
 
@@ -164,18 +162,18 @@ public class YourService extends KiboRpcService {
             double z = zMin;
             if( Math.abs(zMinKIZ1 - z) < Math.abs(zMaxKIZ1 - z) ) {
                 plane = "XY"; // Z- side
-                return plane;
             } else if (Math.abs(zMinKIZ1 - z) > Math.abs(zMaxKIZ1 - z) ) {
                 plane = "-XY"; // Z+ side
-                return plane;
             }
         }
-        return null;
+        return plane;
     }
 
-    /** Method to find quaternion for scan area */
+    /** Method to find quaternion for area from four corner points*/
+    // Input : 4 corner points
+    // Output : quaternion
     protected static Quaternion setQuaternion(Point p1, Point p2, Point p3, Point p4) {
-        String plane = detectPlane(p1, p2, p3, p4);
+        String plane = getPlane(p1, p2, p3, p4);
         Quaternion quaternion;
 
         switch (plane) {
@@ -198,8 +196,10 @@ public class YourService extends KiboRpcService {
     }
 
     /** Method to calculate distance between area and keep in zone*/
-    protected static double distanceAreaAndKiz(Point a1,Point a2, Point a3, Point a4) {
-        String plane = detectPlane(a1,a2,a3,a4);
+    // Input : 4 corner points
+    // Output : distance between area and keep on zone
+    protected static double getDistanceAreaAndKiz(Point a1,Point a2, Point a3, Point a4) {
+        String plane = getPlane(a1,a2,a3,a4);
         double dAreaKiz;
 
         switch (plane) {
@@ -218,47 +218,13 @@ public class YourService extends KiboRpcService {
             default: dAreaKiz = 0;
                 break;
         }
-
         return dAreaKiz;
     }
 
-    /** Method to calculate center point of area */
-//    protected static Point findCenterPoint(gov.nasa.arc.astrobee.types.Point a1,gov.nasa.arc.astrobee.types.Point a2,gov.nasa.arc.astrobee.types.Point a3,gov.nasa.arc.astrobee.types.Point a4){
-//        String plane = detectPlane(a1, a2, a3, a4);
-//
-//        Point centerPointOfArea;
-//
-//        switch (plane){
-//            case "XY":
-//                if (a1.getX() == a2.getX()) {
-//
-//                    centerPointOfArea = new Point(,Math.abs(a1.getY()-a2.getY(),a1.getZ());
-//                }
-//                centerPointOfArea = Math.abs(a1.getZ()-kiz1MinPoint.getZ());
-//                break;
-//            case "-XY":
-//                centerPointOfArea = Math.abs(a1.getZ()-kiz1MaxPoint.getZ());
-//                break;
-//            case "XZ":
-//                centerPointOfArea = Math.abs(a1.getY()-kiz1MaxPoint.getY());
-//                break;
-//            case "-XZ":
-//                centerPointOfArea = Math.abs(a1.getY()-kiz1MinPoint.getY());
-//                break;
-//            case "YZ":
-//                centerPointOfArea = Math.abs(a1.getX()-kiz1MaxPoint.getX());
-//                break;
-//            case "-YZ":
-//                centerPointOfArea = Math.abs(a1.getX()-kiz1MinPoint.getX());
-//                break;
-//            default: centerPointOfArea = null ;
-//                break;
-//        }
-//        return centerPointOfArea;
-//    }
-
     /** Method to check that destination point in KIZ1 or KIZ2*/
-    protected static int whichZonePointIn(double x, double y, double z){
+    // Input : (x,y,z)
+    // Output : 1 or 2 (Number of Zone)
+    protected static int getZoneNumber(double x, double y, double z){
         int currentZone = 0;
 
         if ( xMinKIZ1 < x && x < xMaxKIZ1 && yMinKIZ1 < y && y < yMaxKIZ1 && zMinKIZ1 < z && z < zMaxKIZ1) {
@@ -272,32 +238,38 @@ public class YourService extends KiboRpcService {
     return currentZone;
     }
 
-    protected static double xAstrobee = 0.32d;
-    protected static double yAstrobee = 0.32d;
-    protected static double zAstrobee = 0.32d;
-
     /** Method to check that destination point make astrobee still in keep in zone */
+    // Input : (x,y,z)
+    // Output : true (if point is in zone)
+    //          false (if point not in zone)
     protected static boolean isPointInKIZ(double x, double y, double z){
-        int currentZone = whichZonePointIn(x,y,z);
-
+        int currentZone = getZoneNumber(x,y,z);
+        boolean result = false;
         switch (currentZone){
             case 1:
                 if ( (x+(xAstrobee/2) > xMinKIZ1) && (x+(xAstrobee/2) < xMaxKIZ1) &&
                      (y-(yAstrobee/2) > yMinKIZ1) && (y+(yAstrobee/2) < yMaxKIZ1) &&
                      (z+(zAstrobee/2) > zMinKIZ1) && (z+(zAstrobee/2) < zMaxKIZ1) ){
-                return true;
+                result = true;
                 }
+                break;
             case  2:
                 if ( (x+(xAstrobee/2) > xMinKIZ2) && (x+(xAstrobee/2) < xMaxKIZ2) &&
                      (y-(yAstrobee/2) > yMinKIZ2) && (y+(yAstrobee/2) < yMaxKIZ2) &&
-                     (z+(zAstrobee/2) > zMinKIZ2) && (z+(zAstrobee/2) < zMaxKIZ2) )
-                return  true;
+                     (z+(zAstrobee/2) > zMinKIZ2) && (z+(zAstrobee/2) < zMaxKIZ2) ){
+                result = true;
+                }
+                break;
             default:
-                return false;
+                break;
         }
+        return  result;
     }
 
-    protected static String whichAreaPointIn(Point p){
+    /** Method to find what area point in*/
+    // Input : point
+    // Output : area name
+    protected static String getArea(Point p){
         String area = "" ;
         if (p.getX() <= area1MaxXYZ.getX() && p.getX() >= area1MinXYZ.getX() &&
             p.getY() <= area1MaxXYZ.getY() && p.getY() >= area1MinXYZ.getY() &&
@@ -316,29 +288,31 @@ public class YourService extends KiboRpcService {
                    p.getZ() <= area4MaxXYZ.getZ() && p.getZ() >= area4MinXYZ.getZ()) {
             area = "area4";
         }
-
         return area;
     }
 
-    /** Method to calculate distance in scoring base (within 0.9 m/center must within 0.45 m from KIZ1)*/
-    /** Hard code */
+    /** Method to calculate distance in scoring base (within 0.9 m or center must within 0.45 m from KIZ1)*/
+    /** Hard code use with isAstrobeeInScorePosition (below)*/
     protected static double distanceBetweenPointAndArea(Point p, String area){
         double distance = 0;
-
         switch (area) {
             case "area1" :
                 distance = Math.abs(p.getY() - area1MinXYZ.getY());
+                break;
             case "area2" :
                 distance = Math.abs(p.getZ() - area2MinXYZ.getZ());
+                break;
             case "area3" :
                 distance = Math.abs(p.getZ() - area3MinXYZ.getZ());
+                break;
             case "area4" :
                 distance = Math.abs(p.getX() - area4MinXYZ.getX());
+                break;
         }
         return distance;
     }
 
-    /** Write in runPlane*/
+    /** TO write in runPlane*/
     /** Method to find that Astrobee still in scoring base*/
 //    protected static boolean isAstrobeeInScorePosition(Point p, String area){
 //        boolean astrobeeIsInScorePos = false;
@@ -352,10 +326,10 @@ public class YourService extends KiboRpcService {
 
 
     /** Method to find corner point */
-    protected static Point[] findCornerPoint(double xMin, double yMin, double zMin, double xMax, double yMax, double zMax){
+    protected static Point[] getCornerPoint(double xMin, double yMin, double zMin, double xMax, double yMax, double zMax){
         Point leftTopPoint, leftBottomPoint, rightTopPoint, rightBottomPoint ;
         Point[] cornerPoint = new Point[4];
-        String plane = detectPlane(xMin, yMin, zMin, xMax, yMax, zMax);
+        String plane = getPlane(xMin, yMin, zMin, xMax, yMax, zMax);
         double x,y,z;
 
         switch (plane) {
@@ -374,6 +348,8 @@ public class YourService extends KiboRpcService {
                 cornerPoint[2] = rightBottomPoint;
                 cornerPoint[3] = rightTopPoint;
 
+                break;
+
             case "XZ":
             case "-XZ":
                 y = yMin; // yMin == yMax
@@ -388,6 +364,8 @@ public class YourService extends KiboRpcService {
                 cornerPoint[2] = rightBottomPoint;
                 cornerPoint[3] = rightTopPoint;
 
+                break;
+
             case "YZ":
             case "-YZ":
                 x = xMin; // xMin == xMax
@@ -401,12 +379,14 @@ public class YourService extends KiboRpcService {
                 cornerPoint[1] = leftBottomPoint;
                 cornerPoint[2] = rightBottomPoint;
                 cornerPoint[3] = rightTopPoint;
+                break;
 
         }
         return cornerPoint;
     }
 
 
+    // For image processing part (Incomplete)
     /** Method to find the distance between two points */
     protected static double calculateDistance (org.opencv.core.Point p1, org.opencv.core.Point p2) {
         double dx = p1.x - p2.x;
@@ -415,7 +395,7 @@ public class YourService extends KiboRpcService {
         return Math.sqrt(Math.pow(dx, 2) + Math.pow(dy, 2)); // Pythagorean theorem
     }
 
-        /** Method to resize image */
+    /** Method to resize image */
     protected Mat resizeImg (Mat img, int width) {
         int height= (int) (img.rows()*((double) width / img.cols())); // Calculate new height while maintaining the original ratio.
         Mat resizedImg = new Mat(); // Create new Mat to store resized image.
@@ -653,85 +633,3 @@ public class YourService extends KiboRpcService {
     }
 
 }
-
-/** Note
- *  1st test result : move to area1 then only move to astronaut.
- *  {
- *     "Mission Time": {
- *         "start": "19700101 000239280",
- *         "finish": "19700101 000752968"
- *     },
- *     "RoundingReport": {
- *         "timestamp": "19700101 000746592",
- *         "arrival": {
- *             "try": true,
- *             "success": true,
- *             "distance": 0.012813242358663282
- *         },
- *         "areaMapping": {
- *             "areas": [
- *                 {
- *                     "areaId": 1,
- *                     "level": 1,
- *                     "correct": false, // true if both lost_item and num are correct.
- *                     "lost_item": "coin",
- *                     "num": 0
- *                 },
- *                 {
- *                     "areaId": 2,
- *                     "level": 4,
- *                     "correct": false,
- *                     "lost_item": "coin",
- *                     "num": 0
- *                 },
- *                 {
- *                     "areaId": 3,
- *                     "level": 3,
- *                     "correct": false,
- *                     "lost_item": "coin",
- *                     "num": 0
- *                 },
- *                 {
- *                     "areaId": 4,
- *                     "level": 2,
- *                     "correct": false,
- *                     "lost_item": "coin",
- *                     "num": 0
- *                 }
- *             ]
- *         }
- *     },
- *     "FoundReport": {
- *         "timestamp": "19700101 000752968",
- *         "cameraAngle": 143.4636677666882,
- *         "distance": 1.1999369563560984,
- *         "try": true,
- *         "isInArea": false,
- *         "success": false // true if takeTargetItemSnapshotAPI at the correct position.
- *     },
- *     "Illegal": false,
- *     "TimeBonusN": 3014,
- *     "OasisZoneN": 0.0041628177964165465
- * }
- * 2nd Test
- * {
- *     "Mission Time": {
- *         "start": "19700101 000219440"
- *     },
- *     "RoundingReport": {
- *         "timestamp": "",
- *         "arrival": {
- *             "try": false,
- *             "success": false
- *         },
- *         "areaMapping": {
- *             "areas": []
- *         }
- *     },
- *     "FoundReport": {},
- *     "Illegal": false,
- *     "TimeBonusN": 0,
- *     "OasisZoneN": 0
- * }
- *
- *  */
