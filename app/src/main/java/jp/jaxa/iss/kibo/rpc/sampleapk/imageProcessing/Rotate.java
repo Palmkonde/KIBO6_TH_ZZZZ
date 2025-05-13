@@ -1,4 +1,4 @@
-package jp.jaxa.iss.kibo.rpc.sampleapk.ImageProcessing;
+package jp.jaxa.iss.kibo.rpc.sampleapk.imageProcessing;
 
 import gov.nasa.arc.astrobee.types.Quaternion;
 
@@ -62,13 +62,13 @@ public class Rotate {
 
             case "astronaut":
             case "oppositeArea1":
-                quaternion = astronautOrientation;
+                quaternion = Constants.astronautOrientation;
                 setDefaultQuaternion(quaternion);
                 break;
 
             case "start":
             case "oppositeArea4":
-                quaternion = startOrientation; // (1f,0f,0f,0f)
+                quaternion = Constants.startOrientation; // (1f,0f,0f,0f)
                 setDefaultQuaternion(quaternion);
                 break;
 
