@@ -5,9 +5,7 @@ import jp.jaxa.iss.kibo.rpc.sampleapk.element.Box;
 import jp.jaxa.iss.kibo.rpc.sampleapk.element.Edge;
 import jp.jaxa.iss.kibo.rpc.sampleapk.element.Node;
 import jp.jaxa.iss.kibo.rpc.sampleapk.element.SpatialIndex;
-import org.opencv.core.Mat;
 
-import java.nio.file.Path;
 import java.util.*;
 
 /*
@@ -41,12 +39,12 @@ public class PathPlanUtil {
             new Box(9.5f + OFFSET, -10.5 + OFFSET, 4.02 + OFFSET, 10.5f - OFFSET, -9.6f - OFFSET, 4.8f - OFFSET)
     );
 
-    final double BASE_OASIS_WEIGHT = 0.9f;
-    final double MAX_OASIS_WEIGHT = 1.0f;
+    final double BASE_OASIS_WEIGHT = 0.3f;
+    final double MAX_OASIS_WEIGHT = 0.5f;
     final double STEP = 0.2f;
     final double COST_SAFETY_FACTOR = 1.5f;
     final int MAX_NODE_COUNT = 5000;
-    final double RADIUS_NEARBY = 0.7f;
+    final double RADIUS_NEARBY = 0.825f;
 
     private static Map<Point, List<Edge>> precomputedGraph;
     private final SpatialIndex sptialIndex = new SpatialIndex();
@@ -230,19 +228,20 @@ public class PathPlanUtil {
             nodes.addAll(oasis.getNodes());
         }
 
-        precomputedGraph = buildVisibilityGraph(nodes);
-
         for(Point node : nodes) {
             sptialIndex.insert(node);
         }
 
+        precomputedGraph = buildVisibilityGraph(nodes);
     }
 
     private Map<Point, List<Edge>> buildVisibilityGraph(Set<Point> nodes) {
        Map<Point, List<Edge>>  graph = new HashMap<>();
 
+       // a -> b
        for(Point a : nodes) {
-           for(Point b : nodes) {
+           List<Point> nearbyNodes = findNearbyNodes(a, RADIUS_NEARBY);
+           for(Point b : nearbyNodes) {
                if(a.equals(b) || !isSegmentInKIZ(a, b)) continue;
 
                double cost = calculateCost(a, b);
@@ -256,50 +255,6 @@ public class PathPlanUtil {
        }
 
        return graph;
-    }
-
-    private void pruneSearchSpace(
-            final Map<Point, Double> gScore,
-            Map<Point, Point> cameFrom,
-            Point current, Point start, Point goal,
-            List<Point> currentBestPath
-    ) {
-        double bestScore = gScore.getOrDefault(current, Double.MAX_VALUE);
-        double threshold = bestScore * COST_SAFETY_FACTOR;
-
-        Iterator<Map.Entry<Point, Double>> iterator = gScore.entrySet().iterator();
-
-        while(iterator.hasNext()) {
-            Map.Entry<Point, Double> entry = iterator.next();
-            Point p = entry.getKey();
-            double cost = entry.getValue();
-
-            if(currentBestPath.contains(p)
-                    || p.equals(start)
-                    || p.equals(goal)
-                    || cost <= threshold) continue;
-
-            iterator.remove();
-            cameFrom.remove(p);
-        }
-
-        if(gScore.size()  > MAX_NODE_COUNT) {
-            List<Point> nodes = new ArrayList<>(gScore.keySet());
-            Collections.sort(nodes, new Comparator<Point>() {
-                @Override
-                public int compare(Point p1, Point p2) {
-                    double score1 = gScore.get(p1);
-                    double score2 = gScore.get(p2);
-                    return Double.compare(score1, score2);
-                }
-            });
-
-            for(int i = MAX_NODE_COUNT; i < nodes.size(); i++) {
-                Point p = nodes.get(i);
-                gScore.remove(p);
-                cameFrom.remove(p);
-            }
-        }
     }
 
     private boolean isSegmentInKIZ(Point a, Point b) {
