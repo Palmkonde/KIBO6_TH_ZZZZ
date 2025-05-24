@@ -76,7 +76,7 @@ public class YourService extends KiboRpcService {
         /* ******************************************************************************** */
 
         // When you recognize landmark items, let’s set the type and number.
-        // api.setAreaInfo(1, "item_name", 1);
+         api.setAreaInfo(1, "item_name", 1);
 
         /* **************************************************** */
         /* Let's move to each area and recognize the items. */

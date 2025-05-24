@@ -1,0 +1,31 @@
+description: Ultralytics YOLO11n model trained on data.yaml
+author: Ultralytics
+date: '2025-05-24T16:43:43.391680'
+version: 8.3.144
+license: AGPL-3.0 License (https://ultralytics.com/license)
+docs: https://docs.ultralytics.com
+stride: 32
+task: detect
+batch: 1
+imgsz:
+- 736
+- 736
+names:
+  0: coin
+  1: compass
+  2: coral
+  3: crystal
+  4: diamond
+  5: emerald
+  6: fossil
+  7: key
+  8: letter
+  9: shell
+  10: treasure_box
+args:
+  batch: 1
+  fraction: 1.0
+  half: false
+  int8: false
+  nms: false
+channels: 3
